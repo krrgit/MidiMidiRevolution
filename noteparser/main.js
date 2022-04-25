@@ -40,9 +40,14 @@ import {keySignature, sheetChord, timeSignature} from './symbols.js'
                     for(let tracknum = 0; tracknum < numtracks;++tracknum) {
                         let clefs = this.createClefMeasures(midi.tracks[tracknum].note);
                         let chords = this.createChords(tracknum, midi.tracks[tracknum].note, clefs);
-                        
+                        symbols[tracknum] = createSymbols(chords, clefs, this.time, midi.endTime);
+                        console.log(chords);
                     }
                 },
+
+                createSymbols: function(chords, clefs, time, endTime) {
+                    
+                }
 
                 createChords: function(tracknum, notes, clefs) {
                     let n = 0;
@@ -51,7 +56,7 @@ import {keySignature, sheetChord, timeSignature} from './symbols.js'
 
                     while (n < notes.length) {
                         let starttime = notes[n].startTime;
-                        let c = starttime / this.time.measure >= clefs.length ? clefs.length-1 : starttime / this.time.measure; 
+                        let c = starttime / this.time.measure >= clefs.length ? clefs.length-1 : Math.floor(starttime / this.time.measure); 
                         let clef = clefs[c];
 
                         /* Group all the midi notes with the same start time
@@ -64,11 +69,9 @@ import {keySignature, sheetChord, timeSignature} from './symbols.js'
                             notegroup.push(notes[n]);
                             ++n;
                         }
-
                         let chord = new sheetChord(notegroup, this.mainkey, this.time, clef);
                         chords.push(chord);
-
-                    }   
+                    }
                     return chords;
                 },
 
@@ -133,7 +136,7 @@ import {keySignature, sheetChord, timeSignature} from './symbols.js'
                 
                 // Sheet Music Functions 
                 getKeySignature: function(tracks) {
-                    let key = new keySignature(tracks);
+                    this.mainkey = new keySignature(tracks);
                 },
             };
 
@@ -141,8 +144,6 @@ import {keySignature, sheetChord, timeSignature} from './symbols.js'
             Sheet.getKeySignature(midi.tracks);
 
             Sheet.createNotation(midi);
-
-
         },
         
         /**

@@ -18,7 +18,32 @@ timeSignature.prototype.getNoteDuration = function (duration) {
     return value == 5 ? 5 + (1/3) : value; // 5 = triplet
 }
 
+
+const keyAccids = {
+    C: 0,
+    G: 1,
+    D: 2,
+    A: 3,
+    E: 4,
+    B: 5,
+    F: -1,
+    Bflat: -2,
+    Eflat: -3,
+    Aflat: -4,
+    Dflat: -5,
+    Gflat: -6,
+}
+
+const accid = {
+    none: 0,
+    flat: 1,
+    sharp: 2,
+    natural: 3,
+}
+
 function keySignature (tracks) {
+    this.naturals = Array(12).fill(0);
+
     let notecount = this.getNoteFrequency(tracks);
     console.log(notecount);
 
@@ -43,7 +68,10 @@ function keySignature (tracks) {
     let accidIndex = [3,-2,5,0,-5,2,-3,4,-1,6,1,-4]; 
 
 
-    // Special Case: F#/Fb, bestkey = 9
+    // Special Cases: 
+    // F#/Gb, bestkey = 9
+    // Db/C#, bestkey = 4
+    // B/Cb, bestkey = 2
     // Find out which needs the least amount of accidentals
     if (bestkey == 9) {
     } else {
@@ -66,15 +94,64 @@ keySignature.prototype.getNoteFrequency = function(tracks) {
 }
 
 
-keySignature.prototype.GetWhiteNote = function(notenumber){
-    let notescale = midiToNoteScale(notenumber);
-    let octave = Math.floor((notenumber + 3) / 12 - 1);
-    let accid = 0;
+keySignature.prototype.getWhiteNote = function(notenumber){
+    let sheetNote = {
+        notescale: midiToNoteScale(notenumber),
+        octave: Math.floor((notenumber + 3) / 12 - 1),
+        letter: midiToNoteScale(notenumber),
+        accid: 0,
+    };
 
+    // Map of every notescale that could be an accidental in the current key
+    let accidMap = [9, 4, 11, 6, 1];
+    accidMap.reduce(Math.abs(this.accidCount));    
+
+    // 4 Cases: sharps, flats, natural, none
+    /** If the note is a black key, the letter is determined by the key(sharp or flat)
+     *  If it's a white key, see if the scale contains a sharp/flat version, and add a natural.
+     *  If none is true, then no need for an accidental.
+    */
+    if (accidMap.includes(sheetNote.notescale)) {
+        sheetNote.letter = this.accidCount >= 0 ? sheetNote.letter-1 : sheetNote.letter+1;
+
+        // If the previous note letter was a natural, re-add the accidental
+        if (this.naturals[sheetNote.notescale] == 1) {
+            sheetNote.accid = this.accidCount >= 0 ? 2 : 1;
+            this.naturals[sheetNote.notescale] = 0;
+        }
+
+    } else if (accidMap.reduce(sheetNote.notescale + Math.sign(this.accidCount))) {
+        sheetNote.accid = accid.natural;
+
+        // If we use a natural, keep track so next note applies its proper accidental
+        this.naturals[notescale + Math.sign(this.accidCount)] = 1;
+    }
+
+    /* The above algorithm doesn't quite work for G-flat major.
+    * Handle it here.
+    */
+    if (this.accidCount == keyAccids.Gflat) {
+        switch(sheetNote.letter) {
+            case 1:
+            case 2:
+                ++sheetNote.letter;
+                break;
+            default:
+                break;
+        }
+    }
+    if (this.accidCount < 0 && notescale == 11) {
+        ++sheetNote.octave;
+    }
+    return sheetNote;
+}
+
+Array.prototype.reduce = function(size) {
+    while (this.length > size) { this.pop(); }
 }
 
 const midiToNoteScale = function(notenumber) {
-    return (note.notenumber + 3) % 12; 
+    return (notenumber + 3) % 12; 
 }
 
 function sheetChord (notegroup, mainkey, time, clef) {
@@ -91,22 +168,22 @@ function sheetChord (notegroup, mainkey, time, clef) {
         }
         this.endtime = Math.max(this.endtime, notegroup[n].startTime + notegroup[n].duration);
     }
-
-    sheetnotes = this.createSheetNotes(notegroup, mainkey, time);
+    this.sheetnotes = this.createSheetNotes(notegroup, mainkey, time);
+    // console.log(this.sheetnotes);
 }
 
 sheetChord.prototype.createSheetNotes = function(notegroup, key, time) {
-    this.sheetnotes = [];
+    let sheetnotes = [];
     
     for(let n=0;n<notegroup.length;++n) {
-        this.sheetnotes[n] = {
+        sheetnotes.push({
             number: notegroup[n].notenumber,
             leftside: true,
-            whitenote: {},
+            whitenote: key.getWhiteNote(notegroup[n].notenumber),
             duration: notegroup[n].duration,
-            accid: {}
-        };
+        });
     }
+    return sheetnotes;
 }
 
 sheetChord.prototype.createAccidentals = function() {
