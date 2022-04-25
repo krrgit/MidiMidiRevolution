@@ -55,6 +55,10 @@
         // warnings and internal handled errors.
         debug: false,
 
+        hello: function() {
+            console.log('Hello, world');
+        },
+
         /**
          * [parse description]
          * @param  {[type]} input     [description]
@@ -175,8 +179,12 @@
             let headerSize          = file.readInt(4);                              // header size (unused var), getted just for read pointer movement
             let MIDI                = {};                                           // create new midi object
             MIDI.formatType         = file.readInt(2);                              // get MIDI Format Type
-            MIDI.tracks             = file.readInt(2);                              // get ammount of track chunks
-            MIDI.track              = [];                                           // create array key for track data storing
+            MIDI.trackCount         = file.readInt(2);                              // get ammount of track chunks
+            MIDI.tracks             = [];                                           // create array key for track data storing
+            MIDI.tempo              = 0;
+            MIDI.mainkey            = 0;
+            MIDI.timesig = [];
+            MIDI.endTime            = 0;                                            //>last note's start time
             let timeDivisionByte1   = file.readInt(1);                              // get Time Division first byte
             let timeDivisionByte2   = file.readInt(1);                              // get Time Division second byte
             if(timeDivisionByte1 >= 128){                                           // discover Time Division mode (fps or tpf)
@@ -186,8 +194,8 @@
             }else MIDI.timeDivision  = (timeDivisionByte1 * 256) + timeDivisionByte2;// else... ticks per beat MODE  (2 bytes value)
 
             //  ** read TRACK CHUNK
-            for(let t=1; t <= MIDI.tracks; t++){
-                MIDI.track[t-1]     = {event: [], note: []};                                  // create new Track entry in Array
+            for(let t=1; t <= MIDI.trackCount; t++){
+                MIDI.tracks[t-1]     = {event: [], note: []};                                  // create new Track entry in Array
                 let headerValidation = file.readInt(4);
                 if ( headerValidation === -1 ) break;                               // EOF
                 if(headerValidation !== 0x4D54726B) return false;                   // Track chunk header validation failed.
@@ -234,48 +242,59 @@
                             case 0x21:                                              // MIDI PORT
                             case 0x59:                                              // Key Signature
                             case 0x51:                                              // Set Tempo
-                                MIDI.track[t-1].event[e-1] = {deltaTime: deltaTime, metaType: metaType};
+                                MIDI.tracks[t-1].event[e-1] = {deltaTime: deltaTime, metaType: metaType};
 
-                                MIDI.track[t-1].event[e-1].data = file.readInt(metaEventLength);
+                                MIDI.tracks[t-1].event[e-1].data = file.readInt(metaEventLength);
+                                if (metaType == 0x51 && MIDI.tempo == 0) {
+                                    MIDI.tempo = MIDI.tracks[t-1].event[e-1].data;
+                                } else if (metaType = 0x59 && MIDI.mainkey == 0) {
+                                    // Potential for bug, if keysig events > 1 and start != end key sig.
+                                    MIDI.mainkey = MIDI.tracks[t-1].event[e-1].data; 
+                                }
                                 break;
                             case 0x54:                                              // SMPTE Offset
-                                MIDI.track[t-1].event[e-1] = {deltaTime: deltaTime, metaType: metaType};
+                                MIDI.tracks[t-1].event[e-1] = {deltaTime: deltaTime, metaType: metaType};
                                 
-                                MIDI.track[t-1].event[e-1].data    = [];
-                                MIDI.track[t-1].event[e-1].data[0] = file.readInt(1);
-                                MIDI.track[t-1].event[e-1].data[1] = file.readInt(1);
-                                MIDI.track[t-1].event[e-1].data[2] = file.readInt(1);
-                                MIDI.track[t-1].event[e-1].data[3] = file.readInt(1);
-                                MIDI.track[t-1].event[e-1].data[4] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data    = [];
+                                MIDI.tracks[t-1].event[e-1].data[0] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data[1] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data[2] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data[3] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data[4] = file.readInt(1);
                                 break;
                             case 0x58:                                              // Time Signature
-                                MIDI.track[t-1].event[e-1] = {deltaTime: deltaTime, metaType: metaType};
+                                MIDI.tracks[t-1].event[e-1] = {deltaTime: deltaTime, metaType: metaType};
                             
-                                MIDI.track[t-1].event[e-1].data    = [];
-                                MIDI.track[t-1].event[e-1].data[0] = file.readInt(1);
-                                MIDI.track[t-1].event[e-1].data[1] = file.readInt(1);
-                                MIDI.track[t-1].event[e-1].data[2] = file.readInt(1);
-                                MIDI.track[t-1].event[e-1].data[3] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data    = [];
+                                MIDI.tracks[t-1].event[e-1].data[0] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data[1] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data[2] = file.readInt(1);
+                                MIDI.tracks[t-1].event[e-1].data[3] = file.readInt(1);
 
                                 if (metaEventLength < 2) {                          //>Default Time Signature
-                                    MIDI.track[t-1].event[e-1].numerator = 0;
-                                    MIDI.track[t-1].event[e-1].denominator = 4;
+                                    MIDI.tracks[t-1].event[e-1].numerator = 0;
+                                    MIDI.tracks[t-1].event[e-1].denominator = 4;
                                 } else {                                            //>Get numerator and denominator
-                                    MIDI.track[t-1].event[e-1].numerator = MIDI.track[t-1].event[e-1].data[0] ;
-                                    MIDI.track[t-1].event[e-1].denominator = Math.pow(2, MIDI.track[t-1].event[e-1].data[1]);
+                                    MIDI.tracks[t-1].event[e-1].numerator = MIDI.tracks[t-1].event[e-1].data[0] ;
+                                    MIDI.tracks[t-1].event[e-1].denominator = Math.pow(2, MIDI.tracks[t-1].event[e-1].data[1]);
                                 }
+
+                                if (MIDI.timesig.length == 0) {
+                                    MIDI.timesig = MIDI.tracks[t-1].event[e-1];
+                                }
+                                
                                 break;
                             default :
                                 // if user provided a custom interpreter, call it
                                 // and assign to event the returned data
                                 if( this.customInterpreter !== null){
-                                    MIDI.track[t-1].event[e-1].data = this.customInterpreter( MIDI.track[t-1].event[e-1].metaType, file, metaEventLength);
+                                    MIDI.tracks[t-1].event[e-1].data = this.customInterpreter( MIDI.tracks[t-1].event[e-1].metaType, file, metaEventLength);
                                 }
                                 // if no customInterpretr is provided, or returned
                                 // false (=apply default), perform default action
-                                if(this.customInterpreter === null || MIDI.track[t-1].event[e-1].data === false){
+                                if(this.customInterpreter === null || MIDI.tracks[t-1].event[e-1].data === false){
                                     file.readInt(metaEventLength);
-                                    MIDI.track[t-1].event[e-1].data = file.readInt(metaEventLength);
+                                    MIDI.tracks[t-1].event[e-1].data = file.readInt(metaEventLength);
                                     if (this.debug) console.info('Unimplemented 0xFF meta event! data block readed as Integer');
                                 }
                         }
@@ -295,14 +314,14 @@
                                 // if user provided a custom interpreter, call it
                                 // and assign to event the returned data
                                 if( this.customInterpreter !== null){
-                                    MIDI.track[t-1].event[e-1].data = this.customInterpreter( MIDI.track[t-1].event[e-1].type, file , false);
+                                    MIDI.tracks[t-1].event[e-1].data = this.customInterpreter( MIDI.tracks[t-1].event[e-1].type, file , false);
                                 }
 
                                 // if no customInterpretr is provided, or returned
                                 // false (=apply default), perform default action
-                                if(this.customInterpreter === null || MIDI.track[t-1].event[e-1].data === false){
+                                if(this.customInterpreter === null || MIDI.tracks[t-1].event[e-1].data === false){
                                     let event_length = file.readIntVLV();
-                                    MIDI.track[t-1].event[e-1].data = file.readInt(event_length);
+                                    MIDI.tracks[t-1].event[e-1].data = file.readInt(event_length);
                                     if (this.debug) console.info('Unimplemented 0xF exclusive events! data block readed as Integer');
                                 }
                                 break;
@@ -320,22 +339,23 @@
                                 console.log('note(s)');
 
                                 if (velocity > 0 && type == 0x9) {
-                                    MIDI.track[t-1].note[n] = {
+                                    MIDI.tracks[t-1].note[n] = {
                                         startTime: startTime,
                                         channel: channel,
                                         notenumber: notenumber,
                                         duration: 0,
                                         velocity: velocity,
                                     };
+                                    MIDI.endTime = Math.max(MIDI.endTime,startTime);
                                     ++n;
                                 } else {
                                     // Note Off Event
                                     // Find corresponding Note On and update the duration 
                                     for(let i=n-1;i>=0;--i) {
-                                        if (MIDI.track[t-1].note[i].channel  == channel && 
-                                            MIDI.track[t-1].note[i].notenumber == notenumber &&
-                                            MIDI.track[t-1].note[i].duration == 0) {
-                                                MIDI.track[t-1].note[i].duration = startTime - MIDI.track[t-1].note[i].startTime;
+                                        if (MIDI.tracks[t-1].note[i].channel  == channel && 
+                                            MIDI.tracks[t-1].note[i].notenumber == notenumber &&
+                                            MIDI.tracks[t-1].note[i].duration == 0) {
+                                                MIDI.tracks[t-1].note[i].duration = startTime - MIDI.tracks[t-1].note[i].startTime;
                                         }
                                     }
                                 }
@@ -351,12 +371,12 @@
                                 // if user provided a custom interpreter, call it
                                 // and assign to event the returned data
                                 if( this.customInterpreter !== null){
-                                    MIDI.track[t-1].event[e-1].data = this.customInterpreter( MIDI.track[t-1].event[e-1].metaType, file , false);
+                                    MIDI.tracks[t-1].event[e-1].data = this.customInterpreter( MIDI.tracks[t-1].event[e-1].metaType, file , false);
                                 }
 
                                 // if no customInterpretr is provided, or returned
                                 // false (=apply default), perform default action
-                                if(this.customInterpreter === null || MIDI.track[t-1].event[e-1].data === false){
+                                if(this.customInterpreter === null || MIDI.tracks[t-1].event[e-1].data === false){
                                     console.log('Unknown EVENT detected... reading cancelled!');
                                     return false;
                                 }

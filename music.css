@@ -1,0 +1,9 @@
+@font-face {
+    font-family: 'Bravura';
+    src:url('/Bravura.otf');
+}
+
+.symbol {
+    font-family: 'Bravura';
+    font-size: xx-large;
+}
