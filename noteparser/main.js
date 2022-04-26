@@ -6,8 +6,8 @@
     Description  : Note Parser library reads MIDI events structured as JS objects,
     and outputs sheet music symbols as a readable and structured JS object.
 */
-import {keySignature, sheetChord, timeSignature} from './symbols.js'
-
+import {keySignature, sheetChord, timeSignature} from './objects.js'
+import {sheetTimeSig} from './symbols.js' 
 
 (function(){
     'use strict';
@@ -38,16 +38,100 @@ import {keySignature, sheetChord, timeSignature} from './symbols.js'
                     this.time = new timeSignature(midi.timesig.numerator, midi.timesig.denominator, midi.timeDivision, midi.tempo);
                     console.log(this.time);
                     for(let tracknum = 0; tracknum < numtracks;++tracknum) {
+                        if (midi.tracks[tracknum].note.length == 0) continue;
                         let clefs = this.createClefMeasures(midi.tracks[tracknum].note);
                         let chords = this.createChords(tracknum, midi.tracks[tracknum].note, clefs);
-                        symbols[tracknum] = createSymbols(chords, clefs, this.time, midi.endTime);
-                        console.log(chords);
+                        this.symbols[tracknum] = this.createSymbols(chords, clefs, midi.endTime);
                     }
+
+                    
                 },
 
-                createSymbols: function(chords, clefs, time, endTime) {
+                createSymbols: function(chords, clefs, endTime) {
+                    let symbols = [];
                     
-                }
+                    symbols.push(new sheetTimeSig(this.time.numerator, this.time.denominator));
+                    this.addBars(symbols,chords,endTime);
+                    console.log(symbols);
+                    symbols = this.addRests(symbols);
+                    symbols = this.addClefChanges(symbols);
+
+                    console.log(symbols);
+                    return symbols;
+
+                },
+                
+                addBars: function(symbols, chords, endTime) {
+                    /* The starttime of the beginning of the measure */
+                    let measuretime = 0;
+
+                    let i = 0;
+                    while (i < chords.length) {
+                        if (measuretime <= chords[i].starttime) {
+                            symbols.push({symbol: 'bar', starttime: measuretime});
+                            measuretime += this.time.measure;
+                        } else {
+                            symbols.push(chords[i]);
+                            ++i;                        
+                        }
+                    }
+
+                    /* Keep adding bars until the last StartTime (the end of the song) */
+                    while (measuretime < endTime) {
+                        symbols.push({symbol: 'bar', starttime: measuretime});
+                        measuretime += this.time.measure;
+                    }
+
+                    /* Add the final vertical bar to the last measure */
+                    symbols.push({symbol: 'bar', starttime: measuretime});
+                },
+
+                addRests: function(symbols) {
+                    let prevtime = 0;
+                    let result = [];
+                    let duration = 0;
+
+                    symbols.forEach(symbol => {
+                        duration = Math.max(0,symbol.starttime - prevtime);
+                        if (duration > 0) {
+                            result.push({symbol: 'rest', starttime: symbol.starttime,
+                                duration: this.time.getNoteDuration(duration)});
+                        }                        
+                        result.push(symbol);
+
+                        if (symbol instanceof sheetChord) {
+                            prevtime = Math.max(symbol.endtime, prevtime);
+                        } else {
+                            prevtime = Math.max(symbol.starttime, prevtime);
+                        }
+                    });
+
+                    return result;
+                },
+
+                addClefChanges: function(symbols) {
+                    let result = [];
+                    let prevChord = symbols[1];
+                    let i = 0;
+                    
+                    while(!prevChord instanceof sheetChord && i < symbols.length) {
+                        prevChord = symbols[i];
+                        result.push(symbols[i]);
+                        ++i;
+                    }
+
+                    for(;i<symbols.length;++i) {
+                        if(symbols[i] instanceof sheetChord) {
+                            if(symbols[i].clef != prevChord.clef) {
+                                result.push({symbol: symbols[i].clef, starttime: symbols[i].starttime});
+                                prevChord = symbols[i];
+                                console.log('clef change!');
+                            }
+                        }
+                        result.push(symbols[i]);
+                    }
+                    return result;
+                },
 
                 createChords: function(tracknum, notes, clefs) {
                     let n = 0;
@@ -220,20 +304,8 @@ import {keySignature, sheetChord, timeSignature} from './symbols.js'
 
                     let maxduration = note2.startTime - tracks[t].note[i].startTime;
 
-                    let dur = 0;
-                    if (quarternote <= maxduration)
-                    dur = quarternote;
-                    else if (quarternote/2 <= maxduration)
-                        dur = quarternote/2;
-                    else if (quarternote/3 <= maxduration)
-                        dur = quarternote/3;
-                    else if (quarternote/4 <= maxduration)
-                        dur = quarternote/4;
-
-                    if (dur < tracks[t].note[i].duration) {
-                        dur = tracks[t].note[i].duration;
-                    }
-
+                    let dur = Math.floor(maxduration * 8 / quarternote) * quarternote / 8;
+ 
                     /* Special case: If the previous note's duration
                     * matches this note's duration, we can make a notepair.
                     * So don't expand the duration in that case.
