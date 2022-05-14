@@ -18,8 +18,8 @@ import {sheetTimeSig} from './symbols.js'
      */
     const NoteParser = {
 
-        parse: function(midi, _callback) {
-            if (midi instanceof Object) NoteParser.init(midi);
+        parse: function(midi) {
+            if (midi instanceof Object) return NoteParser.init(midi);
             else throw new Error('NoteParser.parse() : Invalid input provided');
         },
 
@@ -33,18 +33,15 @@ import {sheetTimeSig} from './symbols.js'
                 // Create all music symbols needed for music notation
                 createNotation: function(midi) {
                     let numtracks = Object.keys(midi.tracks).length;
-                    this.symbols = Array(numtracks);
 
                     this.time = new timeSignature(midi.timesig.numerator, midi.timesig.denominator, midi.timeDivision, midi.tempo);
-                    console.log(this.time);
                     for(let tracknum = 0; tracknum < numtracks;++tracknum) {
                         if (midi.tracks[tracknum].note.length == 0) continue;
+
                         let clefs = this.createClefMeasures(midi.tracks[tracknum].note);
                         let chords = this.createChords(tracknum, midi.tracks[tracknum].note, clefs);
-                        this.symbols[tracknum] = this.createSymbols(chords, clefs, midi.endTime);
+                        this.symbols.push(this.createSymbols(chords, clefs, midi.endTime));
                     }
-
-                    
                 },
 
                 createSymbols: function(chords, clefs, endTime) {
@@ -52,11 +49,11 @@ import {sheetTimeSig} from './symbols.js'
                     
                     symbols.push(new sheetTimeSig(this.time.numerator, this.time.denominator));
                     this.addBars(symbols,chords,endTime);
-                    console.log(symbols);
+                    // console.log(symbols);
                     symbols = this.addRests(symbols);
                     symbols = this.addClefChanges(symbols);
 
-                    console.log(symbols);
+                    // console.log(symbols);
                     return symbols;
 
                 },
@@ -125,7 +122,7 @@ import {sheetTimeSig} from './symbols.js'
                             if(symbols[i].clef != prevChord.clef) {
                                 result.push({symbol: symbols[i].clef, starttime: symbols[i].starttime});
                                 prevChord = symbols[i];
-                                console.log('clef change!');
+                                // console.log('clef change!');
                             }
                         }
                         result.push(symbols[i]);
@@ -228,6 +225,7 @@ import {sheetTimeSig} from './symbols.js'
             Sheet.getKeySignature(midi.tracks);
 
             Sheet.createNotation(midi);
+            return Sheet;
         },
         
         /**
