@@ -1,6 +1,7 @@
 import {MidiParser} from '../midiparser/midi-parser.js';
 import {NoteParser} from '../noteparser/note-parser.js';
-import { drawStaves, drawMainSymbols, drawMainClef, drawMainAccid} from './renderer.js';
+import { conductor } from './conductor.js';
+import { drawStaves} from './renderer.js';
 
 
 const canvas = document.querySelector('canvas');
@@ -11,18 +12,18 @@ canvas.height = innerHeight;
 
 let loaded = false;
 
+let con = new conductor();
 
 function gameLoop() {
     requestAnimationFrame(gameLoop);
     c.clearRect(0,0,canvas.width,canvas.height);
     draw();
-    console.log('update');
 }
 
 function draw() {
     drawStaves(c);
     if (!loaded) return;
-    drawMainSymbols(c,sheet);
+    con.update(c,sheet);
 }
 
 // Window Resizing Function
@@ -53,6 +54,8 @@ window.onload = function(){
         sheet = NoteParser.parse(mid);
         console.log(sheet);
         loaded = true;
+
+        con.start(sheet);
     });
 
             

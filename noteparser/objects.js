@@ -25,6 +25,7 @@ function timeSignature (numerator, denominator, quarternote, tempo) {
     this.denominator = denominator;
     this.quarternote = quarternote;
     this.tempo = tempo;
+    this.symbol = 'timesig';
 
     let beat = quarternote * (denominator == 2 ? 2 : 1/(denominator/4));
     if (denominator == 2)
@@ -157,6 +158,7 @@ function sheetChord (notegroup, mainkey, time, clef) {
     this.clef = clef;
     this.starttime = notegroup[0].startTime;
     this.endtime = notegroup[0].startTime + notegroup[0].duration;
+    this.symbol = 'chord';
 
     for (let n=0;n<notegroup.length;++n) {
         if (n > 1) {

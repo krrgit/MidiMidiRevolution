@@ -29,6 +29,7 @@ import {sheetTimeSig} from './symbols.js'
                 mainkey: {},
                 symbols: [],
                 time: {},
+                shortestDuration: 0, // This is the shortest amount of time between chords. Used to compute scroll speed.
 
                 // Create all music symbols needed for music notation
                 createNotation: function(midi) {
@@ -46,16 +47,16 @@ import {sheetTimeSig} from './symbols.js'
 
                 createSymbols: function(chords, clefs, endTime) {
                     let symbols = [];
+
+
+                    this.shortestDuration = this.time.quarternote;
                     
                     symbols.push(new sheetTimeSig(this.time.numerator, this.time.denominator));
                     this.addBars(symbols,chords,endTime);
-                    // console.log(symbols);
                     symbols = this.addRests(symbols);
                     symbols = this.addClefChanges(symbols);
 
-                    // console.log(symbols);
                     return symbols;
-
                 },
                 
                 addBars: function(symbols, chords, endTime) {
@@ -111,6 +112,7 @@ import {sheetTimeSig} from './symbols.js'
                     let prevChord = symbols[1];
                     let i = 0;
                     
+                    // Push symbols until first chord
                     while(!prevChord instanceof sheetChord && i < symbols.length) {
                         prevChord = symbols[i];
                         result.push(symbols[i]);
@@ -122,7 +124,6 @@ import {sheetTimeSig} from './symbols.js'
                             if(symbols[i].clef != prevChord.clef) {
                                 result.push({symbol: symbols[i].clef, starttime: symbols[i].starttime});
                                 prevChord = symbols[i];
-                                // console.log('clef change!');
                             }
                         }
                         result.push(symbols[i]);
@@ -151,9 +152,16 @@ import {sheetTimeSig} from './symbols.js'
                             ++n;
                         }
                         let chord = new sheetChord(notegroup, this.mainkey, this.time, clef);
+                        
+                        this.findShortestTimeSeparation(notegroup[0].duration);
+
                         chords.push(chord);
                     }
                     return chords;
+                },
+
+                findShortestTimeSeparation: function(diff) {
+                    this.shortestDuration = diff < this.shortestDuration ? diff : this.shortestDuration; 
                 },
 
                 // Symbol creation functions
